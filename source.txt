@@ -1,0 +1,59 @@
+--importing the req files 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.{StructType,StructField,StringType,NumericType,IntegerType}
+
+import org.apache.spark.sql.funcition
+
+--geting the data from the hdfs and its header 
+var SportsData =sc.textFile("/user/cloudera/19.1/Sports_data.txt")
+val header = SportsData.first()
+SportsData = SportsData.filter(row => row != header)
+
+--Creating Schema column name and type 
+val SchemaDataFrame = "FirstName:string,LastName:string,Sports:string,MedalType:string,Age:integer,Year:integer,Country:string"
+
+--Creating Schema structure based on the schema type
+val schema = StructType(SchemaDataFrame.split(",").map(fieldInfo=>StructField(fieldInfo.split(":")(0),if (fieldInfo.split(":")(1).equals("string")) StringType else IntegerType ,true)))
+
+--Creating the rdd the will split the data in sports Data and map columns in rows as schema
+val DataRow = SportsData.map(_.split(",")).map(x => Row(x(0), x(1), x(2), x(3), x(4).toInt, x(5).toInt, x(6)))
+
+--creating the data frame form the DataRow and Schema before using sqlcontext object
+val SportsDataDf = sqlContext.createDataFrame(DataRow,schema)
+
+--Creating temp table form the DataFrame
+SportsDataDf.registerTempTable("SportsData")
+
+--Sql select command to view the content of the table
+val sportsCData = sqlContext.sql("Select * from SportsData")
+
+sportsCData.show()
+
+
+
+--  problem 1 
+
+def ChangeName = udf((firstName:String,lastName:String) =>{"Mr."+firstName+" "+lastName})
+
+
+val SportsChangeName = SportsDataDf.withColumn("name",ChangeName(SportsDataDf("FirstName").substr(1,2),SportsDataDf("LastName"))).drop(SportsDataDf("FirstName")).drop(SportsDataDf("LastName"))
+
+SportsChangeName.show()
+
+
+--problem 2
+
+ def AddRanking = udf((medalType:String , age:Int) =>{
+ if(medalType =="gold" && age>=32) "pro"
+ else if(medalType =="gold" && age>=31) "amateur"
+ else if(medalType == "silver" && age>=32) "expert"
+ else  if(medalType == "silver" && age<=31) "rookie"
+ else ""
+ })
+
+
+ val SportsDataFinal = SportsDataDf.withColum("ranking",AddRanking(SportsDataDf("MedalType"),SportsDataDf("Age")))
+
+
+
